@@ -1414,4 +1414,347 @@ type StructField struct {
 // 十三、练习题 - 反射
 // 编写代码利用反射实现一个ini文件的解析器程序。
 
-//十四、并发
+//十四、并发 ******
+//串行：顺序执行，一个接着一个
+//并发：同一时间段执行多个任务，交替做多个任务
+//并行：同一时刻执行多个任务，同时做多个任务
+//进程（process）：程序在操作系统中的一次执行过程，系统进行资源分配和调度的一个独立单位
+//线程（thread）：操作系统基于进程开启的轻量级进程，是操作系统调度执行的最小单位
+//协程（coroutine）：非操作系统提供而是用用户自行创建和控制的用户态“线程”，比线程更加轻量级
+
+//并发模型
+//1、线程&锁模型
+//2、Actor模型
+//3、CSP模型
+//4、Fork&Join模型
+//Go语言中的并发程序主要是通过CSP的goroutine和channel 来实现，当然也支持使用传统的多线程共享内存的并发方式
+
+//goroutine
+//1、Goroutine 是 Go 语言支持并发的核心，在一个Go程序中同时创建成百上千个goroutine是非常普遍的，一个goroutine会以一个很小的栈开始其生命周期，一般只需要2KB。区别于操作系统线程由系统内核进行调度， goroutine 是由Go运行时（runtime）负责调度。
+//2、Goroutine 是 Go 程序中最基本的并发执行单元。每一个 Go 程序都至少包含一个 goroutine——main goroutine，当 Go 程序启动时它会自动创建。
+//3、在Go语言编程中你不需要去自己写进程、线程、协程，你的技能包里只有一个技能——goroutine，当你需要让某个任务并发执行的时候，你只需要把这个任务包装成一个函数，开启一个 goroutine 去执行这个函数就可以了
+
+//go关键字
+//Go语言中使用 goroutine 非常简单，只需要在函数或方法调用前加上go关键字就可以创建一个 goroutine ，从而让该函数或方法在新创建的 goroutine 中执行。
+//go f()  // 创建一个新的 goroutine 运行函数f
+//匿名函数也支持使用go关键字创建 goroutine 去执行。
+/*
+go func(){
+  // ...
+}()
+*/
+//一个 goroutine 必定对应一个函数/方法，可以创建多个 goroutine 去执行相同的函数/方法。
+
+//启动单个goroutine
+//启动 goroutine 的方式非常简单，只需要在调用函数（普通函数和匿名函数）前加上一个go关键字。
+//但是容易出现一个问题，主goroutine退出太快，可能导致某些函数还未执行，但是程序已经结束了。
+//解决方案：1、使用Sleep，但是它时间难以精确控制，效率低度低。2、使用sync.WaitGroup，（sync是一个包）使用WaitGroup可以等待所有 goroutine 执行完毕。
+//启动多个goroutine
+// 关键特性：执行顺序不确定，多次运行会发现打印顺序不同，因为：
+// goroutine是并发执行的；Go运行时的调度是随机的、非确定的，这是正常现象，体现了真正的并发
+//总结：用go启动，用WaitGroup等待，记住main退出则全结束，执行顺序不保证。
+
+//动态栈
+//操作系统的线程一般都有固定的栈内存（通常为2MB），而Go语言的goroutine非常轻量级，一个goroutine的初始栈空间很小（一般为2KB），所以在Go语言中一次创建数万个goroutine也是可能的。
+//并且goroutine的栈不是固定的，可以根据需要动态的增加或者缩小，Go的runtime会自动为goroutine分配合适的栈空间。
+
+// goroutine调度
+// 操作系统内核在调度时会挂起当前正在执行的线程并将寄存器中的内容保存到内存中，然后选出接下来要执行的线程并从内存中恢复该线程的寄存器信息，
+// 然后恢复执行该线程的现场并开始执行线程。从一个线程切换到另一个线程需要完整的上下文切换。因为可能需要多次内存访问，
+// 索引这个切换上下文的操作开销较大，会增加运行的cpu周期。
+
+// 区别于操作系统内核调度操作系统线程，goroutine 的调度是Go语言运行时（runtime）层面的实现，是完全由 Go 语言本身实现的一套调度系统——go scheduler。
+// 它的作用是按照一定的规则将所有的 goroutine 调度到操作系统线程上执行。
+
+// 在经历数个版本的迭代之后，目前 Go 语言的调度器采用的是 GPM 调度模型。
+//核心思想比喻：GPM调度像高效物流：每个配送站（P）管理本地包裹（G），快递员（M）优先送本站包裹，本站没货时去其他站"借"或去总仓（全局队列）取，避免任何快递员闲着。
+
+//GOMAXPROCS
+//Go运行时的调度器使用GOMAXPROCS参数来确定需要使用多少个 OS 线程来同时执行 Go 代码。默认值是机器上的 CPU 核心数。
+//Go语言中可以通过runtime.GOMAXPROCS函数设置当前程序并发时占用的 CPU逻辑核心数。
+
+// 十四、练习题 - 并发
+// 请写出下面程序的执行结果。
+/*
+for i := 0; i < 5; i++ {
+	go func() {
+		fmt.Println(i)
+	}()
+}
+*/
+//预测最有可能的答案是 5 5 5 5 5
+
+//channel
+// 单纯地将函数并发执行是没有意义的。函数与函数间需要交换数据才能体现并发执行函数的意义。
+
+// 虽然可以使用共享内存进行数据交换，但是共享内存在不同的 goroutine 中容易发生竞态问题。
+// 为了保证数据交换的正确性，很多并发模型中必须使用互斥量对内存进行加锁，这种做法势必造成性能问题。
+
+// Go语言采用的并发模型是CSP（Communicating Sequential Processes），提倡通过通信共享内存而不是通过共享内存而实现通信。
+
+// 如果说 goroutine 是Go程序并发的执行体，channel就是它们之间的连接。channel是可以让一个 goroutine 发送特定值到另一个 goroutine 的通信机制。
+
+// Go 语言中的通道（channel）是一种特殊的类型。通道像一个传送带或者队列，总是遵循先入先出（First In First Out）的规则，保证收发数据的顺序。
+// 每一个通道都是一个具体类型的导管，也就是声明channel的时候需要为其指定元素类型。
+
+//channel类型
+//var 变量名称 chan 元素类型
+// 其中：
+// chan：是关键字
+// 元素类型：是指通道中传递元素的类型
+
+//channel零值
+//未初始化的通道类型变量其默认零值是nil
+
+//初始化channel
+//声明的通道类型变量需要使用内置的make函数初始化之后才能使用。
+//make(chan 元素类型, [缓冲大小])
+// 其中：
+// channel的缓冲大小是可选的。
+
+//channel操作
+//通道共有发送（send）、接收(receive）和关闭（close）三种操作。而发送和接收操作都使用<-符号。
+//首先定义一个通道
+//ch := make(chan int)
+//发送
+// ch <- 10 // 把10发送到ch中
+//接收
+// x := <- ch // 从ch中接收值并赋值给变量x
+// <-ch       // 从ch中接收值，忽略结果
+//关闭
+//close(ch)
+// **注意：**一个通道值是可以被垃圾回收掉的。通道通常由发送方执行关闭操作，并且只有在接收方明确等待通道关闭的信号时才需要执行关闭操作。
+// 它和关闭文件不一样，通常在结束操作之后关闭文件是必须要做的，但关闭通道不是必须的。
+
+// 关闭后的通道有以下特点：
+/*
+1、对一个关闭的通道再发送值就会导致 panic。
+2、对一个关闭的通道进行接收会一直获取值直到通道为空。
+3、对一个关闭的并且没有值的通道执行接收操作会得到对应类型的零值。
+4、关闭一个已经关闭的通道会导致 panic。
+*/
+
+//无缓冲的通道
+//无缓冲的通道又称为阻塞的通道。
+//deadlock表示我们程序中的 goroutine 都被挂起导致程序死锁了。
+//无缓冲的通道只有在有接收方能够接收值的时候才能发送成功，否则会一直处于等待发送的阶段。
+// 同理，如果对一个无缓冲通道执行接收操作时，没有任何向通道中发送值的操作那么也会导致接收操作阻塞。
+// 简单来说就是无缓冲的通道必须有至少一个接收方才能发送成功。
+//使用无缓冲通道进行通信将导致发送和接收的 goroutine 同步化。因此，无缓冲通道也被称为同步通道。
+
+//有缓冲的通道
+//我们可以在使用 make 函数初始化通道时，可以为其指定通道的容量
+//只要通道的容量大于零，那么该通道就属于有缓冲的通道，通道的容量表示通道中最大能存放的元素数量。
+// 当通道内已有元素数达到最大容量后，再向通道执行发送操作就会阻塞，除非有从通道执行接收操作。
+//我们可以使用内置的len函数获取通道内元素的数量，使用cap函数获取通道的容量，虽然我们很少会这么做。
+
+//多返回值模式
+//对一个通道执行接收操作时支持使用如下多返回值模式。
+//value, ok := <- ch
+// 其中：
+/*
+value：从通道中取出的值，如果通道被关闭则返回对应类型的零值。
+ok：通道ch关闭时返回 false，否则返回 true。
+*/
+
+//for range接收值
+//通常我们会选择使用for range循环从通道中接收值，当通道被关闭后，会在通道内的所有值被接收完毕后会自动退出循环。
+//**注意：**目前Go语言中并没有提供一个不对通道进行读取操作就能判断通道是否被关闭的方法。不能简单的通过len(ch)操作来判断通道是否被关闭。
+
+//单向通道
+//在某些场景下我们可能会将通道作为参数在多个任务函数间进行传递，通常我们会选择在不同的任务函数中对通道的使用进行限制，比如限制通道在某个函数中只能执行发送或只能执行接收操作。
+//Go语言中提供了单向通道来处理这种需要限制通道只能进行某种操作的情况。
+//在函数传参及任何赋值操作中全向通道（正常通道）可以转换为单向通道，但是无法反向转换。
+//**注意：**对已经关闭的通道再执行 close 也会引发 panic。
+
+// Go 通道操作说明
+// 一、通道的四种状态：
+/*
+nil：未初始化的通道
+
+没值：通道为空，无数据可读
+
+有值：通道中有数据可读
+
+满：缓冲通道已满
+*/
+
+// 二、发送操作：
+/*
+nil 通道 → 阻塞
+
+没值（空缓冲） → 发送成功
+
+有值（有数据） → 发送成功
+
+满（缓冲满） → 阻塞
+*/
+
+// 三、接收操作：
+/*
+nil 通道 → 阻塞
+
+没值（空缓冲） → 阻塞
+
+有值（有数据） → 接收成功
+
+满（缓冲满） → 接收成功
+*/
+
+// 四、关闭操作：
+/*
+nil 通道 → panic
+
+没值（空缓冲） → 关闭成功
+
+有值（有数据） → 关闭成功
+
+满（缓冲满） → 关闭成功
+*/
+
+// 重要提醒：
+/*
+1、对 nil 通道进行发送或接收会永久阻塞
+2、关闭 nil 通道会导致 panic
+3、向已关闭的通道发送数据会 panic
+4、关闭已关闭的通道也会 panic
+*/
+
+//select多路复用
+// Select 语句具有以下特点：
+/*
+1、可处理一个或多个 channel 的发送/接收操作。
+2、如果多个 case 同时满足，select 会随机选择一个执行。
+3、对于没有 case 的 select 会一直阻塞，可用于阻塞 main 函数，防止退出。
+*/
+
+//并发安全和锁
+//可能会发生数据竞争的情况
+// 关键点总结
+/*
+1、并发不安全：多个 goroutine 无保护地访问共享资源
+2、结果不可预测：每次运行可能得到不同结果
+3、需要同步机制：使用锁等工具保证同一时间只有一个 goroutine 访问临界区
+*/
+// 解决方案：使用互斥锁（sync.Mutex）或其它同步原语保护共享资源。
+
+//互斥锁
+//互斥锁是一种常用的控制共享资源访问的方法，它能够保证同一时间只有一个 goroutine 可以访问共享资源。Go 语言中使用sync包中提供的Mutex类型来实现互斥锁。
+// sync.Mutex提供了两个方法供我们使用。
+/*
+方法名	                     功能
+func (m *Mutex) Lock()	    获取互斥锁
+func (m *Mutex) Unlock()	释放互斥锁
+*/
+//使用互斥锁能够保证同一时间有且只有一个 goroutine 进入临界区，其他的 goroutine 则在等待锁；
+// 当互斥锁释放后，等待的 goroutine 才可以获取锁进入临界区，多个 goroutine 同时等待一个锁时，唤醒的策略是随机的。
+
+// 读写互斥锁
+//互斥锁是完全互斥的，但是实际上有很多场景是读多写少的，当我们并发的去读取一个资源而不涉及资源修改的时候是没有必要加互斥锁的，这种场景下使用读写锁是更好的一种选择。读写锁在 Go 语言中使用sync包中的RWMutex类型。
+// sync.RWMutex提供了以下5个方法。
+/*
+方法名	                               功能
+func (rw *RWMutex) Lock()	          获取写锁
+func (rw *RWMutex) Unlock()	          释放写锁
+func (rw *RWMutex) RLock()	          获取读锁
+func (rw *RWMutex) RUnlock()	      释放读锁
+func (rw *RWMutex) RLocker() Locker	  返回一个实现Locker接口的读写锁
+*/
+//读写锁分为两种：读锁和写锁。当一个 goroutine 获取到读锁之后，其他的 goroutine 如果是获取读锁会继续获得锁，如果是获取写锁就会等待；
+// 而当一个 goroutine 获取写锁之后，其他的 goroutine 无论是获取读锁还是写锁都会等待。
+//使用读写互斥锁在读多写少的场景下能够极大地提高程序的性能。不过需要注意的是如果一个程序中的读操作和写操作数量级差别不大，那么读写互斥锁的优势就发挥不出来。
+
+//sync.WaitGroup
+// 在代码中生硬的使用time.Sleep肯定是不合适的，Go语言中可以使用sync.WaitGroup来实现并发任务的同步。 sync.WaitGroup有以下几个方法：
+/*
+方法名	                                 功能
+func (wg * WaitGroup) Add(delta int)	计数器+delta
+(wg *WaitGroup) Done()	                计数器-1
+(wg *WaitGroup) Wait()	                阻塞直到计数器变为0
+*/
+//sync.WaitGroup内部维护着一个计数器，计数器的值可以增加和减少。
+//需要注意sync.WaitGroup是一个结构体，进行参数传递的时候要传递指针。
+
+//sync.Once
+// 在某些场景下我们需要确保某些操作即使在高并发的场景下也只会被执行一次，例如只加载一次配置文件等。
+// Go语言中的sync包中提供了一个针对只执行一次场景的解决方案——sync.Once，sync.Once只有一个Do方法，其签名如下：
+//func (o *Once) Do(f func())
+//**注意：**如果要执行的函数f需要传递参数就需要搭配闭包来使用。
+
+//sync.Map
+//Go 语言中内置的 map 不是并发安全的
+// Go语言的sync包中提供了一个开箱即用的并发安全版 map——sync.Map。
+// 开箱即用表示其不用像内置的 map 一样使用 make 函数初始化就能直接使用。
+// 同时sync.Map内置了诸如Store、Load、LoadOrStore、Delete、Range等操作方法。
+/*
+方法名																						功能
+func (m *Map) Store(key, value interface{})												存储key-value数据
+func (m *Map) Load(key interface{}) (value interface{}, ok bool)						查询key对应的value
+func (m *Map) LoadOrStore(key, value interface{}) (actual interface{}, loaded bool)		查询或存储key对应的value
+func (m *Map) LoadAndDelete(key interface{}) (value interface{}, loaded bool)			查询并删除key
+func (m *Map) Delete(key interface{})													删除key
+func (m *Map) Range(f func(key, value interface{}) bool)								对map中的每个key-value依次调用f
+*/
+
+//原子操作
+//针对整数数据类型（int32、uint32、int64、uint64）我们还可以使用原子操作来保证并发安全，通常直接使用原子操作比使用锁操作效率更高。
+// Go语言中原子操作由内置的标准库sync/atomic提供。
+
+//atomic包
+/*
+方法																							解释
+func LoadInt32(addr *int32) (val int32)															读取操作
+func LoadInt64(addr *int64) (val int64)															读取操作
+func LoadUint32(addr *uint32) (val uint32)														读取操作
+func LoadUint64(addr *uint64) (val uint64)														读取操作
+func LoadUintptr(addr *uintptr) (val uintptr)													读取操作
+func LoadPointer(addr *unsafe.Pointer) (val unsafe.Pointer)										读取操作
+
+func StoreInt32(addr *int32, val int32)															写入操作
+func StoreInt64(addr *int64, val int64)															写入操作
+func StoreUint32(addr *uint32, val uint32)														写入操作
+func StoreUint64(addr *uint64, val uint64)														写入操作
+func StoreUintptr(addr *uintptr, val uintptr)													写入操作
+func StorePointer(addr *unsafe.Pointer, val unsafe.Pointer)										写入操作
+
+func AddInt32(addr *int32, delta int32) (new int32)												修改操作
+func AddInt64(addr *int64, delta int64) (new int64)												修改操作
+func AddUint32(addr *uint32, delta uint32) (new uint32)											修改操作
+func AddUint64(addr *uint64, delta uint64) (new uint64)											修改操作
+func AddUintptr(addr *uintptr, delta uintptr) (new uintptr)										修改操作
+
+func SwapInt32(addr *int32, new int32) (old int32)												交换操作
+func SwapInt64(addr *int64, new int64) (old int64)												交换操作
+func SwapUint32(addr *uint32, new uint32) (old uint32)											交换操作
+func SwapUint64(addr *uint64, new uint64) (old uint64)											交换操作
+func SwapUintptr(addr *uintptr, new uintptr) (old uintptr)										交换操作
+func SwapPointer(addr *unsafe.Pointer, new unsafe.Pointer) (old unsafe.Pointer)					交换操作
+
+func CompareAndSwapInt32(addr *int32, old, new int32) (swapped bool)							比较并交换操作
+func CompareAndSwapInt64(addr *int64, old, new int64) (swapped bool)							比较并交换操作
+func CompareAndSwapUint32(addr *uint32, old, new uint32) (swapped bool)							比较并交换操作
+func CompareAndSwapUint64(addr *uint64, old, new uint64) (swapped bool)							比较并交换操作
+func CompareAndSwapUintptr(addr *uintptr, old, new uintptr) (swapped bool)						比较并交换操作
+func CompareAndSwapPointer(addr *unsafe.Pointer, old, new unsafe.Pointer) (swapped bool)		比较并交换操作
+*/
+//atomic包提供了底层的原子级内存操作，对于同步算法的实现很有用。这些函数必须谨慎地保证正确使用。除了某些特殊的底层应用，使用通道或者 sync 包的函数/类型实现同步更好。
+
+// 十四、练习题 - 并发
+// 练习题
+// 1、使用 goroutine 和 channel 实现一个计算int64随机数各位数和的程序，例如生成随机数61345，计算其每个位数上的数字之和为19。
+// 2、开启一个 goroutine 循环生成int64类型的随机数，发送到jobChan
+// 3、开启24个 goroutine 从jobChan中取出随机数计算各位数的和，将结果发送到resultChan
+// 4、主 goroutine 从resultChan取出结果并打印到终端输出
+
+// 十五、处理并发错误 ******
+//recover goroutine中的panic
+
+// errgroup
+// errgroup.Group 提供了Go和Wait两个方法。
+// func (g *Group) Go(f func() error)
+// 1、 Go 函数会在新的 goroutine 中调用传入的函数f。
+// 2、 第一个返回非零错误的调用将取消该Group；下面的Wait方法会返回该错误
+// func (g *Group) Wait() error
+//Wait 会阻塞直至由上述 Go 方法调用的所有函数都返回，然后从它们返回第一个非nil的错误（如果有）。
+
+// 十六、网络编程
